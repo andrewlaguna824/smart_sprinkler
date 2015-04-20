@@ -26,7 +26,8 @@ boolean irrigate = true;
 String location;
 String request="";
 int sensorPin = A0; // Input pin for moisture sensor
-int sensorValue = 0; // value from moisture sensor
+int sensor_value = 0; // value from moisture sensor
+int soil_moisture_level = 0; // value from moisture sensor
 
 #define W5200_CS  10
 #define SDCARD_CS 4
@@ -46,6 +47,8 @@ void setup() {
  
 void loop()
 {
+  // Measure soil moisture level
+  soil_moisture_level = measureMoisture();
   // parse weather data for precipitation forecast
   while(client.available()) {
     //Serial.println("client available");
@@ -54,12 +57,12 @@ void loop()
      if (client.find("number=\"5")) {
        Serial.println("Rain in the weather forecast"); 
        Serial.println("Irrigation system will not turn on");
-       irrigate = false;
+       // irrigate = false;
      }
-     else {
-       Serial.println("No rain in the weather forecast");
+     else if (!client.find("number=\"5") && irrigate) {
+       Serial.println("No rain in the weather forecast, but soil is dry");
        Serial.println("Irrigation system will turn on");
-       irrigate = true;
+       // irrigate = true;
      }
   }
  
@@ -122,9 +125,15 @@ void loop()
  
  int measureMoisture() {
    // read value from sensor
-   sensorValue = analogRead(sensorPin);
+   sensor_value = analogRead(sensorPin);
    
+   if (sensor_value <= 430) {
+     irrigate = true; 
+   }
+   else {
+     irrigate = false; 
+   }
    // print sensor value to UART
-   Serial.println("Moisture Value: " + sensorValue);
+   Serial.println("Moisture Value: " + sensor_value);
  } // end measure Moisture method
  
