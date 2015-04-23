@@ -1,11 +1,5 @@
 // Andrew Palmer ajp294@cornell.edu
-// 6 April 2015
-// To Do: 
-// Clean up code and turn most things into functions (like twitter example)
-// add user input for location - Done
-// might need some sort of Serial menu (do at end of project) to navigate program
-// make Connect to Server take in location input as argument
-// ADC code for moisture sensor
+// 22 April 2015
 
 #include <SPI.h>
 #include <EthernetV2_0.h>
@@ -29,6 +23,7 @@ int state = 0; // Program state
 boolean irrigate = true; // boolean to irrigate or not
 String location; // user inputed location
 String request=""; // url request string
+boolean connection_failed = false;
 int sensorPin = A0; // Input pin for moisture sensor
 int sensor_value = 0; // value from moisture sensor
 int soil_moisture_level = 0; // value from moisture sensor
@@ -63,6 +58,7 @@ void loop()
   
   switch (state) {
     case 0: {
+      Serial.println("Menu state");
       // Program Menu to set location, time, or force check moisture
       // only go into Menu when menu button pressed
       // if button is pressed, check moisture level
@@ -81,8 +77,8 @@ void loop()
     }
       break;
     case 1: {
-      // Continually check time
-      Serial.println("REAL TIME CLOCK CASE STATEMENT");
+      // Continually check current time
+      Serial.println("Check time state");
       DateTime now = rtc.now();
       Serial.print(now.year(), DEC);
       Serial.print('/');
@@ -96,31 +92,58 @@ void loop()
       Serial.print(':');
       Serial.print(now.second(), DEC);
       Serial.println();
-      state = 2;
-    }
+      
+      // When current time == check time, move to next state, otherwise spin
+      if (now.hour() == check_hr && now.minute() == check_mn && now.second() == check_s) {
+         state = 2;
+      } // end if
+      else {
+        state = 1; // stay in same state if not check time yet  
+      } // end else
+    } // end case 1
       break;
     case 2: {
       // Measure Moisture
+      Serial.println("Measure moisture state");
       soil_moisture_level = measureMoisture();
+      Serial.println("Moisture level: " + String(soil_moisture_level));
+      if (irrigate) {
+        Serial.println("Soil is dry");  
+      } // end if
+      else {
+        Serial.println("Soil is moist"); 
+      } // end else
       state = 3;
-    }
+    } // end case 2
       break;
     case 3: {
       // Download weather data from user's location
+      Serial.println("Connect to Server State");
+      Serial.println("LOCATION IS: " + location);
+      
       connectToServer(location);
       while(client.available()) {
         if (client.find("number=\"5")) {
           Serial.println("Rain in the weather forecast"); 
           Serial.println("Irrigation system will not turn on");
           // irrigate = false;
+       //   client.stop(); // try to break out of client once we have needed info
         } // end if
-        else if (!client.find("number=\"5") && irrigate) {
+        else { //if (!client.find("number=\"5") && irrigate) 
           Serial.println("No rain in the weather forecast, but soil is dry");
           Serial.println("Irrigation system will turn on");
           // irrigate = true;
+         // client.stop();
         } // end else if
       } // end while
- 
+      
+      // Error recovery
+      if (connection_failed) {
+        Serial.println("Connection failed... attempting again");
+        state = 3; // Try again if connection failed
+        
+      } // end if
+      
       // if the server's disconnected, stop the client:
       if (!client.connected()) {
         Serial.println();
@@ -128,12 +151,17 @@ void loop()
         client.stop();
  
         // do nothing forevermore:
-        while(true);
-      } // end it
+        // while(true);
+      } // end if
+      
+      state = 1; // back to time checking state
     } //end case 3
-      state = 1;
       break;
+    case 4:
+      // Idle State waiting for user input?
+      Serial.println("Spinning on idle state");  
   } // end switch statement
+  
   
 } //end loop function
   // location = getLocation();
@@ -179,6 +207,7 @@ void loop()
    Serial.println("connecting to server...");
    if (client.connect(serverName, 80)) {
      Serial.println("connected!");
+     connection_failed = false;
      Serial.println("making HTTP request...");
      // make the HTTP GET request to weather api
      request = "GET /data/2.5/forecast/daily?q=" + location_name + "&mode=xml&units=metric&cnt=1 HTTP/1.0";
@@ -191,11 +220,12 @@ void loop()
     // if you didn't get a connection to the server:
     // maybe retry a couple times in this method
     Serial.println("connection failed");
+    connection_failed = true;
    }
    
    // note the time of this connect attempt
    //lastAttemptTime = millis();
-   
+   delay(1000);
  } // end connectToServer method
  
  String getLocation() {
@@ -288,6 +318,6 @@ void loop()
      irrigate = false; 
    }
    // print sensor value to UART
-   Serial.println("Moisture Value: " + sensor_value);
+   //Serial.println("Moisture Value: " + sensor_value);
  } // end measure Moisture method
  
